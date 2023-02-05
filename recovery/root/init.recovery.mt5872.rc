@@ -1,0 +1,53 @@
+on init
+    mkdir /data/property
+    # sdcard/usb mount points
+    mkdir /mnt
+    mkdir /mnt/sdcard
+    mkdir /mnt/usb
+    mkdir /mnt/usb/sda1
+    mkdir /mnt/usb/mmcblka1
+    mkdir /storage
+
+on early-fs
+    write /proc/sys/kernel/printk 7
+    setprop sys.usb.configfs 1
+
+on fs
+    # for shutdown mode in recovery to load PM.bin
+    mkdir /mnt/vendor/tvservice
+    mount ext4 /dev/block/platform/mstar_mci.0/by-name/tvservice /mnt/vendor/tvservice ro
+    copy /mnt/vendor/tvservice/glibc/bin/PM.bin /mnt/PM.bin
+
+    # for dynamic IR to get the ir_config.ini
+    mkdir /mnt/vendor/tvconfig
+    mount ext4 /dev/block/platform/mstar_mci.0/by-name/tvconfig /mnt/vendor/tvconfig wait noatime block_validity nodiscard data=ordered journal_checksum
+
+    # restore security contexts here to label those device nodes created by utopia
+    restorecon /dev/gflip
+    restorecon /dev/msmailbox
+    restorecon /dev/system
+
+# Set watchdog timer to 30 seconds and pet it every 10 seconds to get a 20 second margin
+#service watchdogd /sbin/watchdogd 10 20
+#    class core
+# enable ir input for reboot recovery case
+    write /sys/module/mdrv_ir/parameters/input_event_en 1
+    write /sys/module/mdrv_ir/parameters/input_dev_event_enable 1
+
+    # for mtk bluetooth
+    insmod /vendor/firmware/firmware_class.ko
+    insmod /vendor/firmware/btmtk_usb.ko
+
+on boot
+    wait /ir_done 1
+    umount /mnt/vendor/tvconfig
+
+on property:ro.debuggable=1
+    start console
+
+service console /system/bin/sh
+    console
+    user root
+    group shell log readproc
+    seclabel u:r:shell:s0
+    setenv HOSTNAME console
